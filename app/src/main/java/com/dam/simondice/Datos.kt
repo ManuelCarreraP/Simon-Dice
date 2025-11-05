@@ -5,7 +5,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /**
- * Clase que almacena los datos del juego (VERSION BASADA EN TEXTO).
+ * Clase que almacena los datos del juego.
  */
 object Datos {
     // Variables de Estado Reactivas
@@ -23,7 +23,7 @@ object Datos {
     // Variables de UI/Control
     var text by mutableStateOf("START") // Texto del botón inferior
     var speed = 250 // Velocidad base del destello (en ms)
-    var colorHintDuration = 2000L // Duración en milisegundos para mostrar el nombre del color
+    var colorHintDuration = 1000L // Duración en milisegundos para mostrar el nombre del color
 
     // Colores de los botones (reactivos para el destello)
     var colorRed by mutableStateOf(Color.Red)
@@ -51,7 +51,7 @@ enum class Colores(val colorInt: Int, val nombre: String) {
     AMARILLO(3, "AMARILLO")
 }
 
-// Función de extensión para obtener el color base (MOVEMOS AQUÍ)
+// Función de extensión para obtener el color base
 fun Colores.baseColor(): Color {
     return when (this) {
         Colores.ROJO -> Color.Red

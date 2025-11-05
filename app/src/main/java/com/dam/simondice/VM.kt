@@ -7,13 +7,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 /**
- * Función de extensión para oscurecer un color.
+ * Función de extensión para aclarar un color (en vez de oscurecer).
  */
-fun Color.darken(factor: Float): Color {
+fun Color.lighten(factor: Float): Color {
     val a = alpha
-    val r = red * factor
-    val g = green * factor
-    val b = blue * factor
+    val r = (1f - (1f - red) * factor).coerceIn(0f, 1f)
+    val g = (1f - (1f - green) * factor).coerceIn(0f, 1f)
+    val b = (1f - (1f - blue) * factor).coerceIn(0f, 1f)
     return Color(r, g, b, a)
 }
 
@@ -22,8 +22,8 @@ fun Color.darken(factor: Float): Color {
  */
 class VM : ViewModel() {
 
-    fun generaNumero(maximo: Int): Int {
-        return (0 until maximo).random()
+    private fun obtenerNumeroAleatorio(): Int {
+        return (0..3).random()
     }
 
     fun inicializaJuego() {
@@ -32,163 +32,177 @@ class VM : ViewModel() {
         Datos.secuencia.clear()
         Datos.secuenciaUsuario.clear()
         Datos.status = Status.INICIO
-        Datos.text = "¡A JUGAR!"
+        Datos.text = "¡COMIENZA!"
         Datos.colorNameHint = ""
-        aumentarSecuencia()
+        generarNuevaSecuencia()
     }
 
-    fun aumentarSecuencia() {
+    private fun generarNuevaSecuencia() {
         Datos.status = Status.SECUENCIA
-        Datos.secuencia.add(generaNumero(4))
+        Datos.secuencia.add(obtenerNumeroAleatorio())
         Datos.secuenciaUsuario.clear()
         Datos.ronda = Datos.secuencia.size
-        mostrarSecuencia()
+        reproducirSecuencia()
     }
 
     /**
-     * Muestra la secuencia de colores al usuario solo con el flash de los botones.
-     * Muestra la pista de texto SOLO para el nuevo color añadido.
+     * Muestra la secuencia de colores al usuario.
      */
-    fun mostrarSecuencia() {
+    private fun reproducirSecuencia() {
         viewModelScope.launch {
-            Datos.text = "¡MEMORIZA LA SECUENCIA!"
+            Datos.text = "¡RECUERDA!"
 
-            // Iterar sobre la secuencia completa, SOLO FLASH
-            for (colorInt in Datos.secuencia) {
+            // Iterar sobre la secuencia completa
+            for (indice in Datos.secuencia.indices) {
+                val colorInt = Datos.secuencia[indice]
                 val colorEnum = Colores.values().first { it.colorInt == colorInt }
 
-                // Pista visual: flashea el botón.
-                // NO se actualiza Datos.colorNameHint aquí (según tu requisito).
-                cambiaColorBotonSecuencia(colorEnum, true)
-
-                // Tiempo de visualización es la velocidad del juego
+                // Efecto visual: flashea el botón
+                activarEfectoColor(colorEnum, true)
                 delay(Datos.speed.toLong())
 
-                // Lo borra
-                cambiaColorBotonSecuencia(colorEnum, false)
-                delay(Datos.speed.toLong() / 2) // Pausa de separación
+                activarEfectoColor(colorEnum, false)
+
+                // Pausa más corta entre colores
+                if (indice < Datos.secuencia.size - 1) {
+                    delay(Datos.speed.toLong() / 3)
+                }
             }
 
-            // Finalizada la secuencia, comienza el turno del usuario.
-            Datos.text = "¡TU TURNO!"
+            // Preparar turno del usuario
+            Datos.text = "¡REPITE!"
             Datos.status = Status.ESPERANDO
 
-            // Muestra la pista de texto SOLO para el NUEVO color añadido (el último de la secuencia)
+            // Mostrar pista solo para el nuevo color
             if (Datos.secuencia.isNotEmpty()) {
-                val lastColorInt = Datos.secuencia.last()
-                muestraPistaDeTexto(lastColorInt)
+                mostrarIndicadorColor(Datos.secuencia.last())
             }
         }
     }
 
     /**
-     * Muestra la pista de texto solo por colorHintDuration (2 segundos).
+     * Muestra la pista de texto por un tiempo limitado.
      */
-    fun muestraPistaDeTexto(colorInt: Int) {
+    private fun mostrarIndicadorColor(colorInt: Int) {
         viewModelScope.launch {
-            val colorName = Colores.values().first { it.colorInt == colorInt }.nombre
+            val nombreColor = Colores.values().first { it.colorInt == colorInt }.nombre
+            Datos.colorNameHint = nombreColor
+            delay(Datos.colorHintDuration)
 
-            Datos.colorNameHint = colorName
-            delay(Datos.colorHintDuration) // Pista visible por 2 segundos
-
-            // Si el jugador sigue esperando el input, borra la pista
-            if (Datos.status != Status.FINALIZADO) {
+            // Solo limpiar si el juego sigue activo
+            if (Datos.status == Status.ESPERANDO || Datos.status == Status.ENTRADA) {
                 Datos.colorNameHint = ""
             }
         }
     }
 
-    fun aumentarSecuenciaUsuario(colorPulsado: Int) {
+    fun procesarEntradaUsuario(colorPulsado: Int) {
         if (Datos.status == Status.ESPERANDO || Datos.status == Status.ENTRADA) {
             Datos.status = Status.ENTRADA
             Datos.secuenciaUsuario.add(colorPulsado)
-            compruebaSecuencia()
+            verificarSecuencia()
         }
     }
 
-    private fun compruebaSecuencia(){
-        val indiceActual = Datos.secuenciaUsuario.lastIndex
+    private fun verificarSecuencia() {
+        val ultimoIndice = Datos.secuenciaUsuario.lastIndex
 
-        // 1. Comprueba si el último clic es correcto
-        if (Datos.secuenciaUsuario[indiceActual] != Datos.secuencia[indiceActual]) {
+        // Verificar si el último clic es correcto
+        if (Datos.secuenciaUsuario[ultimoIndice] != Datos.secuencia[ultimoIndice]) {
             Datos.colorNameHint = ""
-            compruebaSecuenciaUsuario(false) // Game Over
+            manejarResultadoSecuencia(false) // Game Over
             return
         }
 
-        // 2. Comprueba si la secuencia COMPLETA está terminada
+        // Verificar si se completó la secuencia
         if (Datos.secuenciaUsuario.size == Datos.secuencia.size) {
             Datos.colorNameHint = ""
-            compruebaSecuenciaUsuario(true) // Pasa de ronda
+            manejarResultadoSecuencia(true) // Pasa de ronda
         } else {
-            // 3. El clic fue correcto. Si la pista de texto está vacía, no se muestra nada más.
+            // Continuar ingresando la secuencia
             Datos.status = Status.ESPERANDO
         }
     }
 
-    private fun compruebaSecuenciaUsuario(esCorrecta: Boolean) {
+    private fun manejarResultadoSecuencia(acierto: Boolean) {
         viewModelScope.launch {
-            if (esCorrecta) {
-                // Aumentar dificultad
-                if (Datos.ronda % 4 == 0 && Datos.speed > 50) {
-                    Datos.speed -= 25
+            if (acierto) {
+                // Incrementar dificultad cada 3 rondas
+                if (Datos.ronda % 3 == 0 && Datos.speed > 60) {
+                    Datos.speed -= 20
                 }
 
+                // Actualizar récord si es necesario
                 if (Datos.ronda > Datos.record) {
                     Datos.record = Datos.ronda
                 }
-                Datos.text = "¡RONDA ${Datos.ronda} SUPERADA!"
-                delay(1000)
-                aumentarSecuencia()
+
+                Datos.text = "¡CORRECTO!"
+                delay(800) // Tiempo ligeramente menor
+                generarNuevaSecuencia()
             } else {
-                finalizaJuego()
+                terminarJuego()
             }
         }
     }
 
-    fun finalizaJuego() {
+    fun terminarJuego() {
         viewModelScope.launch {
             Datos.status = Status.FINALIZADO
-            Datos.colorNameHint = "GAME OVER"
-            Datos.mensajeToast = "Has perdido. Tu récord es: ${Datos.record}"
+            Datos.colorNameHint = "FIN DEL JUEGO"
+            Datos.mensajeToast = "Juego terminado. Récord: ${Datos.record}"
             Datos.mostrarToast = true
-            Datos.text = "START"
+            Datos.text = "REINICIAR"
         }
     }
 
     /**
-     * Flash del botón (feedback de click o parte de la secuencia).
-     * Usa Colores.baseColor() definido en Datos.kt.
-     * @param activate true para oscurecer, false para restaurar.
+     * Efecto visual para los botones (usa aclarado en vez de oscurecido).
      */
-    fun cambiaColorBotonSecuencia(colores: Colores, activate: Boolean) {
-        val newColor = if (activate) {
-            colores.baseColor().darken(0.2f)
+    fun activarEfectoColor(colores: Colores, activar: Boolean) {
+        val nuevoColor = if (activar) {
+            colores.baseColor().lighten(0.3f) // Aclara en vez de oscurecer
         } else {
             colores.baseColor()
         }
 
         when (colores) {
-            Colores.ROJO -> Datos.colorRed = newColor
-            Colores.VERDE -> Datos.colorGreen = newColor
-            Colores.AZUL -> Datos.colorBlue = newColor
-            Colores.AMARILLO -> Datos.colorYellow = newColor
+            Colores.ROJO -> Datos.colorRed = nuevoColor
+            Colores.VERDE -> Datos.colorGreen = nuevoColor
+            Colores.AZUL -> Datos.colorBlue = nuevoColor
+            Colores.AMARILLO -> Datos.colorYellow = nuevoColor
         }
     }
 
-
     /**
-     * Flash corto como feedback de click.
+     * Feedback visual al pulsar un botón.
      */
-    fun cambiaColorBoton(colores: Colores) {
-        val delayDuration = 150L
-
+    fun efectoPulsacionBoton(colores: Colores) {
         viewModelScope.launch {
-            // Activa el flash
-            cambiaColorBotonSecuencia(colores, true)
-            delay(delayDuration)
-            // Desactiva el flash
-            cambiaColorBotonSecuencia(colores, false)
+            activarEfectoColor(colores, true)
+            delay(120L) // Tiempo ligeramente diferente
+            activarEfectoColor(colores, false)
         }
+    }
+
+    // Función de compatibilidad (para no romper UI.kt)
+    fun aumentarSecuenciaUsuario(colorPulsado: Int) {
+        procesarEntradaUsuario(colorPulsado)
+    }
+
+    fun cambiaColorBoton(colores: Colores) {
+        efectoPulsacionBoton(colores)
+    }
+
+    fun cambiaColorBotonSecuencia(colores: Colores, activate: Boolean) {
+        activarEfectoColor(colores, activate)
+    }
+
+    fun aumentarSecuencia() {
+        generarNuevaSecuencia()
+    }
+
+    fun finalizaJuego() {
+        terminarJuego()
     }
 }
